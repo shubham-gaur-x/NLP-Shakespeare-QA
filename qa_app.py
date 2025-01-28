@@ -1,30 +1,38 @@
 import os
+import requests
 import streamlit as st
 import pandas as pd
-import gdown
 from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
 
-# Define Google Drive Direct Download Links (Update FILE_IDs)
+# Define Google Drive Direct Download Links
 MODEL_URL = "https://drive.google.com/uc?id=1T2gM_VXJ1M0QyXycg7XwMPKUzvU2WFsE"
 TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
+CONFIG_URL = "https://drive.google.com/uc?id=1TWrEmy6jVjCeM1Da5KVgvCmXM8R2MQCm"
 
-# Define local model path
+# Define local model directory
 model_dir = "shakespeare_qa_model"
-
-# Ensure model directory exists
 os.makedirs(model_dir, exist_ok=True)
 
-# Check if model & tokenizer exist; if not, download them
+# Function to download a file from a URL
+def download_file(url, destination):
+    """Download a file from a given URL to the specified destination."""
+    if not os.path.exists(destination):
+        st.write(f"Downloading {os.path.basename(destination)}... This may take a few minutes.")
+        response = requests.get(url, stream=True)
+        with open(destination, "wb") as file:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                file.write(chunk)
+    else:
+        st.write(f"{os.path.basename(destination)} already exists.")
+
+# Download necessary files
 model_path = f"{model_dir}/model.safetensors"
 tokenizer_path = f"{model_dir}/tokenizer.json"
+config_path = f"{model_dir}/config.json"
 
-if not os.path.exists(model_path):
-    st.write("Downloading model... This may take a few minutes.")
-    gdown.download(MODEL_URL, model_path, quiet=False)
-
-if not os.path.exists(tokenizer_path):
-    st.write("Downloading tokenizer... This may take a few minutes.")
-    gdown.download(TOKENIZER_URL, tokenizer_path, quiet=False)
+download_file(MODEL_URL, model_path)
+download_file(TOKENIZER_URL, tokenizer_path)
+download_file(CONFIG_URL, config_path)
 
 # Load Model and Tokenizer
 model = AutoModelForQuestionAnswering.from_pretrained(model_dir)
@@ -44,10 +52,8 @@ st.write("Ask any question about Shakespeare's works, and I'll provide an answer
 question = st.text_input("Enter your question:")
 
 if question:
-    # Use the first scene text as context (Replace this with a smarter context selection logic)
-    context = df.iloc[0]['Text']
-
-    # Get the answer
+    # Concatenate all text for context (or modify this to focus on specific sections)
+    context = " ".join(df['Text'].values)  # Combine all text
     answer = qa_pipeline(question=question, context=context)['answer']
 
     # Display the answer
