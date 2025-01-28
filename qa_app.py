@@ -1,18 +1,18 @@
 import os
-import streamlit as st
-import pandas as pd
 import gdown
-import torch
-from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
+import streamlit as st
+import onnxruntime as ort
+import numpy as np
+from transformers import AutoTokenizer
 
-# Google Drive links (ensure permissions are set to "Anyone with the link can view")
-MODEL_URL = "https://drive.google.com/uc?id=1T2gM_VXJ1M0QyXycg7XwMPKUzvU2WFsE"
+# Google Drive URLs
+MODEL_URL = "https://drive.google.com/uc?id=1kBFDOQ2QgClZ-u2xvR4tilfR63_MXzt6"
 TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
 CONFIG_URL = "https://drive.google.com/uc?id=1TWrEmy6jVjCeM1Da5KVgvCmXM8R2MQCm"
 
-# Define local storage paths
+# Define paths
 MODEL_DIR = "shakespeare_qa_model"
-MODEL_PATH = os.path.join(MODEL_DIR, "model.safetensors")
+MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
 TOKENIZER_PATH = os.path.join(MODEL_DIR, "tokenizer.json")
 CONFIG_PATH = os.path.join(MODEL_DIR, "config.json")
 
@@ -20,50 +20,44 @@ CONFIG_PATH = os.path.join(MODEL_DIR, "config.json")
 if not os.path.exists(MODEL_DIR):
     os.makedirs(MODEL_DIR)
 
-# Download model files if they do not exist
-def download_file(url, output_path):
-    if not os.path.exists(output_path):
-        st.write(f"Downloading {output_path.split('/')[-1]}... This may take a few minutes.")
-        gdown.download(url, output_path, quiet=False)
-    else:
-        st.write(f"{output_path.split('/')[-1]} already exists.")
+# Download the ONNX model if it doesn't exist
+if not os.path.exists(MODEL_PATH):
+    st.write("Downloading ONNX model... This may take a few minutes.")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-download_file(MODEL_URL, MODEL_PATH)
-download_file(TOKENIZER_URL, TOKENIZER_PATH)
-download_file(CONFIG_URL, CONFIG_PATH)
+# Download the tokenizer if it doesn't exist
+if not os.path.exists(TOKENIZER_PATH):
+    st.write("Downloading tokenizer...")
+    gdown.download(TOKENIZER_URL, TOKENIZER_PATH, quiet=False)
 
-# Load model and tokenizer from local directory
-model = AutoModelForQuestionAnswering.from_pretrained(MODEL_DIR)
+# Download the config if it doesn't exist
+if not os.path.exists(CONFIG_PATH):
+    st.write("Downloading config...")
+    gdown.download(CONFIG_URL, CONFIG_PATH, quiet=False)
+
+# Load the tokenizer
 tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
 
-# Move model to GPU if available
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
+# Load ONNX Model
+session = ort.InferenceSession(MODEL_PATH)
 
-# Caching the QA pipeline for efficiency
-@st.cache_resource
-def load_pipeline():
-    return pipeline("question-answering", model=model, tokenizer=tokenizer)
+# Function to get predictions
+def answer_question(question, context):
+    inputs = tokenizer(question, context, return_tensors="np")
+    input_ids = inputs["input_ids"].astype(np.int64)
+    attention_mask = inputs["attention_mask"].astype(np.int64)
 
-qa_pipeline = load_pipeline()
-
-# Load the Shakespeare dataset
-df = pd.read_csv("shakespeare_text.csv")
+    # Run ONNX inference
+    output = session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})
+    return tokenizer.decode(output[0][0])
 
 # Streamlit UI
 st.title("Shakespeare Q&A System")
-st.write("Ask any question about Shakespeare's works, and I'll provide an answer!")
+st.write("Ask any question about Shakespeare's works!")
 
-# User question input
 question = st.text_input("Enter your question:")
-
 if question:
-    # Select the first 10 records for context
-    context = " ".join(df['Text'].values[:10])
-
-    # Get the answer
-    result = qa_pipeline(question=question, context=context)
-
-    # Display the answer
+    context = "Some Shakespeare context here..."  # Replace with actual text
+    answer = answer_question(question, context)
     st.subheader("Answer:")
-    st.write(result['answer'])
+    st.write(answer)
