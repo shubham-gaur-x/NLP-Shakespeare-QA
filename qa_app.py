@@ -39,7 +39,6 @@ tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased")
 session = ort.InferenceSession(MODEL_PATH)
 
 # Load the Shakespeare dataset
-# Replace with your dataset if different
 df = pd.read_csv("shakespeare_text.csv")  # Ensure the file is uploaded
 full_context = " ".join(df["Text"].values)  # Combine all scenes as context
 
