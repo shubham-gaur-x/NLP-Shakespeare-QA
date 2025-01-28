@@ -4,51 +4,54 @@ import streamlit as st
 import onnxruntime as ort
 import numpy as np
 from transformers import AutoTokenizer
+import pandas as pd
 
-# Define Google Drive links
+# Define Google Drive Links for Model & Tokenizer
 MODEL_URL = "https://drive.google.com/uc?id=1kBFDOQ2QgClZ-u2xvR4tilfR63_MXzt6"
 TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
 CONFIG_URL = "https://drive.google.com/uc?id=1TWrEmy6jVjCeM1Da5KVgvCmXM8R2MQCm"
 
-# Define file paths
-model_dir = "shakespeare_qa_model"
-model_path = os.path.join(model_dir, "model.onnx")
-tokenizer_path = os.path.join(model_dir, "tokenizer.json")
-config_path = os.path.join(model_dir, "config.json")
+# Define paths for the downloaded files
+MODEL_PATH = "shakespeare_qa_model/model.onnx"
+TOKENIZER_PATH = "shakespeare_qa_model/tokenizer.json"
+CONFIG_PATH = "shakespeare_qa_model/config.json"
 
-# Ensure model directory exists
-if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
+# Ensure the directories exist
+os.makedirs("shakespeare_qa_model", exist_ok=True)
 
-# Download files if not present
-if not os.path.exists(model_path):
-    st.write("Downloading model... This may take a few minutes.")
-    gdown.download(MODEL_URL, model_path, quiet=False)
+# Download model and tokenizer if not already available
+if not os.path.exists(MODEL_PATH):
+    st.write("Downloading ONNX model... Please wait.")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-if not os.path.exists(tokenizer_path):
-    st.write("Downloading tokenizer... This may take a few seconds.")
-    gdown.download(TOKENIZER_URL, tokenizer_path, quiet=False)
+if not os.path.exists(TOKENIZER_PATH):
+    st.write("Downloading tokenizer... Please wait.")
+    gdown.download(TOKENIZER_URL, TOKENIZER_PATH, quiet=False)
 
-if not os.path.exists(config_path):
-    st.write("Downloading config... This may take a few seconds.")
-    gdown.download(CONFIG_URL, config_path, quiet=False)
+if not os.path.exists(CONFIG_PATH):
+    st.write("Downloading config... Please wait.")
+    gdown.download(CONFIG_URL, CONFIG_PATH, quiet=False)
 
-# Load tokenizer
-tokenizer = AutoTokenizer.from_pretrained(model_dir)
+# Load the tokenizer
+tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased")
 
-# Load ONNX model
-session = ort.InferenceSession(model_path)
+# Initialize the ONNX runtime session
+session = ort.InferenceSession(MODEL_PATH)
+
+# Load the Shakespeare dataset
+# Replace with your dataset if different
+df = pd.read_csv("shakespeare_text.csv")  # Ensure the file is uploaded
+full_context = " ".join(df["Text"].values)  # Combine all scenes as context
 
 # Function to get predictions
-def answer_question(question, context):
-    # Tokenize input with consistent sequence length
+def answer_question(question):
     inputs = tokenizer(
         question,
-        context,
+        full_context,
         return_tensors="np",
         truncation=True,
-        max_length=512,  # Ensure input length matches model expectation
-        padding="max_length",  # Pad to the maximum length
+        padding="max_length",
+        max_length=17  # Match the model's expected input size
     )
     input_ids = inputs["input_ids"].astype(np.int64)
     attention_mask = inputs["attention_mask"].astype(np.int64)
@@ -56,11 +59,8 @@ def answer_question(question, context):
     # Run ONNX inference
     outputs = session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})
 
-    # Extract start and end logits
-    start_logits = outputs[0][0]  # Start logits
-    end_logits = outputs[1][0]    # End logits
-
-    # Find the start and end positions
+    # Get the predicted start and end token indices
+    start_logits, end_logits = outputs
     start_idx = np.argmax(start_logits)
     end_idx = np.argmax(end_logits)
 
@@ -72,14 +72,10 @@ def answer_question(question, context):
 st.title("Shakespeare Q&A System")
 st.write("Ask any question about Shakespeare's works, and I'll provide an answer!")
 
-# Create text inputs for context and question
-context = st.text_area("Enter the context (e.g., a passage or scene):", height=200)
+# Input for the user's question
 question = st.text_input("Enter your question:")
 
-if question and context:
-    # Get the answer
-    answer = answer_question(question, context)
-
-    # Display the answer
+if question:
+    answer = answer_question(question)
     st.subheader("Answer:")
     st.write(answer)
