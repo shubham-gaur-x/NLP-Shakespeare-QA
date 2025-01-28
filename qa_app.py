@@ -4,18 +4,27 @@ import pandas as pd
 import gdown
 from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
 
-# Define Google Drive Links for Model & Tokenizer
+# Define Google Drive Direct Download Links (Update FILE_IDs)
 MODEL_URL = "https://drive.google.com/uc?id=1T2gM_VXJ1M0QyXycg7XwMPKUzvU2WFsE"
 TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
 
 # Define local model path
 model_dir = "shakespeare_qa_model"
 
-# Ensure model files are downloaded
-if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
-    gdown.download(MODEL_URL, f"{model_dir}/model.safetensors", quiet=False)
-    gdown.download(TOKENIZER_URL, f"{model_dir}/tokenizer.json", quiet=False)
+# Ensure model directory exists
+os.makedirs(model_dir, exist_ok=True)
+
+# Check if model & tokenizer exist; if not, download them
+model_path = f"{model_dir}/model.safetensors"
+tokenizer_path = f"{model_dir}/tokenizer.json"
+
+if not os.path.exists(model_path):
+    st.write("Downloading model... This may take a few minutes.")
+    gdown.download(MODEL_URL, model_path, quiet=False)
+
+if not os.path.exists(tokenizer_path):
+    st.write("Downloading tokenizer... This may take a few minutes.")
+    gdown.download(TOKENIZER_URL, tokenizer_path, quiet=False)
 
 # Load Model and Tokenizer
 model = AutoModelForQuestionAnswering.from_pretrained(model_dir)
@@ -31,19 +40,16 @@ df = pd.read_csv("shakespeare_text.csv")
 st.title("Shakespeare Q&A System")
 st.write("Ask any question about Shakespeare's works, and I'll provide an answer!")
 
-# Allow users to select an Act and Scene
-act = st.selectbox("Select Act:", df['Act'].unique())
-scene = st.selectbox("Select Scene:", df[df['Act'] == act]['Scene'].unique())
-
-# Get selected context
-scene_text = df[(df['Act'] == act) & (df['Scene'] == scene)]['Text'].values[0]
-
 # User question input
 question = st.text_input("Enter your question:")
 
 if question:
-    answer = qa_pipeline(question=question, context=scene_text)['answer']
-    
+    # Use the first scene text as context (Replace this with a smarter context selection logic)
+    context = df.iloc[0]['Text']
+
+    # Get the answer
+    answer = qa_pipeline(question=question, context=context)['answer']
+
     # Display the answer
     st.subheader("Answer:")
     st.write(answer)
