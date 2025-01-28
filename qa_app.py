@@ -5,59 +5,69 @@ import onnxruntime as ort
 import numpy as np
 from transformers import AutoTokenizer
 
-# Google Drive URLs
+# Paths for downloading model and tokenizer
 MODEL_URL = "https://drive.google.com/uc?id=1kBFDOQ2QgClZ-u2xvR4tilfR63_MXzt6"
 TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
 CONFIG_URL = "https://drive.google.com/uc?id=1TWrEmy6jVjCeM1Da5KVgvCmXM8R2MQCm"
 
-# Define paths
-MODEL_DIR = "shakespeare_qa_model"
-MODEL_PATH = os.path.join(MODEL_DIR, "model.onnx")
-TOKENIZER_PATH = os.path.join(MODEL_DIR, "tokenizer.json")
-CONFIG_PATH = os.path.join(MODEL_DIR, "config.json")
+MODEL_PATH = "./shakespeare_qa_model/model.onnx"
+TOKENIZER_PATH = "./shakespeare_qa_model/tokenizer.json"
+CONFIG_PATH = "./shakespeare_qa_model/config.json"
 
-# Ensure model directory exists
-if not os.path.exists(MODEL_DIR):
-    os.makedirs(MODEL_DIR)
+# Ensure the directory exists
+os.makedirs("./shakespeare_qa_model", exist_ok=True)
 
-# Download the ONNX model if it doesn't exist
+# Download model and tokenizer if not already present
 if not os.path.exists(MODEL_PATH):
-    st.write("Downloading ONNX model... This may take a few minutes.")
+    st.write("Downloading model...")
     gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-# Download the tokenizer if it doesn't exist
 if not os.path.exists(TOKENIZER_PATH):
     st.write("Downloading tokenizer...")
     gdown.download(TOKENIZER_URL, TOKENIZER_PATH, quiet=False)
 
-# Download the config if it doesn't exist
 if not os.path.exists(CONFIG_PATH):
     st.write("Downloading config...")
     gdown.download(CONFIG_URL, CONFIG_PATH, quiet=False)
 
 # Load the tokenizer
-tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+tokenizer = AutoTokenizer.from_pretrained("./shakespeare_qa_model")
 
-# Load ONNX Model
+# Load the ONNX model
 session = ort.InferenceSession(MODEL_PATH)
 
-# Function to get predictions
+# Function to answer a question based on context
 def answer_question(question, context):
-    inputs = tokenizer(question, context, return_tensors="np")
-    input_ids = inputs["input_ids"].astype(np.int64)
-    attention_mask = inputs["attention_mask"].astype(np.int64)
+    inputs = tokenizer(question, context, return_tensors="np", truncation=True, max_length=512)
+    input_ids = inputs["input_ids"]
+    attention_mask = inputs["attention_mask"]
 
     # Run ONNX inference
-    output = session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})
-    return tokenizer.decode(output[0][0])
+    outputs = session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})
+
+    # Convert the output logits to integer token IDs and decode
+    start_logits = outputs[0][0]  # Start logits
+    end_logits = outputs[1][0]    # End logits
+
+    # Find the start and end positions
+    start_idx = np.argmax(start_logits)
+    end_idx = np.argmax(end_logits)
+
+    # Decode the tokens between start and end
+    answer_tokens = input_ids[0][start_idx : end_idx + 1]
+    return tokenizer.decode(answer_tokens, skip_special_tokens=True)
 
 # Streamlit UI
 st.title("Shakespeare Q&A System")
-st.write("Ask any question about Shakespeare's works!")
+st.write("Ask any question about Shakespeare's works, and I'll provide an answer!")
 
+# Input from the user
 question = st.text_input("Enter your question:")
+
 if question:
-    context = "Some Shakespeare context here..."  # Replace with actual text
+    # Example context (replace with actual context from Shakespeare)
+    context = "Some Shakespeare context here..."
     answer = answer_question(question, context)
+
     st.subheader("Answer:")
     st.write(answer)
