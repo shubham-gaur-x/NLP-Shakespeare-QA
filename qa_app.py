@@ -1,51 +1,48 @@
 import os
-import subprocess
-
-# Install dependencies if not available
-required_packages = ["transformers", "torch", "pandas", "gdown"]
-
-for package in required_packages:
-    try:
-        __import__(package)
-    except ImportError:
-        subprocess.run(["pip", "install", package])
-
-
 import streamlit as st
-from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
 import pandas as pd
+import gdown
+from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
 
-# Load the fine-tuned model and tokenizer
-model_dir = "/Users/shubhamgaur/Desktop/NU/Sem3/NLP/Final Exam/shakespeare_qa_model"
+# Define Google Drive Links for Model & Tokenizer
+MODEL_URL = "https://drive.google.com/uc?id=1T2gM_VXJ1M0QyXycg7XwMPKUzvU2WFsE"
+TOKENIZER_URL = "https://drive.google.com/uc?id=1B5WxrV3yLfMBs2ERI_cw7tvDU-ssRR_o"
+
+# Define local model path
+model_dir = "shakespeare_qa_model"
+
+# Ensure model files are downloaded
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
+    gdown.download(MODEL_URL, f"{model_dir}/model.safetensors", quiet=False)
+    gdown.download(TOKENIZER_URL, f"{model_dir}/tokenizer.json", quiet=False)
+
+# Load Model and Tokenizer
 model = AutoModelForQuestionAnswering.from_pretrained(model_dir)
 tokenizer = AutoTokenizer.from_pretrained(model_dir)
 
 # Create the QA pipeline
 qa_pipeline = pipeline("question-answering", model=model, tokenizer=tokenizer)
 
-# Function to answer a question based on the provided context
-def answer_question(question, context):
-    result = qa_pipeline(question=question, context=context)
-    return result['answer']
+# Load Shakespeare text data
+df = pd.read_csv("shakespeare_text.csv")
 
-# Load the Shakespeare text data into a pandas DataFrame
-# Replace the path with your actual file path if it's not named 'shakespeare_text.csv'
-df = pd.read_csv("shakespeare_text.csv")  # Load your data into a DataFrame
-
-# Streamlit UI elements
+# Streamlit UI
 st.title("Shakespeare Q&A System")
 st.write("Ask any question about Shakespeare's works, and I'll provide an answer!")
 
-# Create a text input for the user to ask questions
+# Allow users to select an Act and Scene
+act = st.selectbox("Select Act:", df['Act'].unique())
+scene = st.selectbox("Select Scene:", df[df['Act'] == act]['Scene'].unique())
+
+# Get selected context
+scene_text = df[(df['Act'] == act) & (df['Scene'] == scene)]['Text'].values[0]
+
+# User question input
 question = st.text_input("Enter your question:")
 
 if question:
-    # Concatenate all scene texts to form a single large context
-    # You can also choose to use a specific play or part of the play if necessary
-    context = " ".join(df['Text'].values)  # Concatenate all scene texts for broader context
-    
-    # Get the answer using the entire text as context
-    answer = answer_question(question, context)
+    answer = qa_pipeline(question=question, context=scene_text)['answer']
     
     # Display the answer
     st.subheader("Answer:")
