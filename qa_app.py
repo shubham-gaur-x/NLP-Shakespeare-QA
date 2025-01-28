@@ -1,3 +1,16 @@
+import os
+import subprocess
+
+# Install dependencies if not available
+required_packages = ["transformers", "torch", "pandas", "gdown"]
+
+for package in required_packages:
+    try:
+        __import__(package)
+    except ImportError:
+        subprocess.run(["pip", "install", package])
+
+
 import streamlit as st
 from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
 import pandas as pd
